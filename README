@@ -1,6 +1,7 @@
 X.FDATATYPES is a Common Lisp library which implements 2 functional data structures:
-- hash-table (more or less translation of Clojure implementation of Bagwell tries)
-- array (also a translation from Clojure + more functions on it)
+- hash-table (Bagwell tries ala Clojure)
+- array (similar to Clojure)
+- set
 
 X.FDATATYPES also implements FMAP, FOLD, FILTER and FMAP-TO functions for easy working 
 with data structures. 
