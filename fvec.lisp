@@ -29,6 +29,11 @@
                                                    chunk
                                                    (length chunk)))))))))
 
+(defmethod coerce-fvec ((x sequence))
+  (let ((result (make-vec-ctx :shift 5 :root #() :tail #())))
+    (map nil (lambda (val) (setf result (vec-ctx-add-tail result val))) x)
+    (%make-fvec :vec-ctx result)))
+
 ;;;;;;;;;;
 
 (defstruct (fvec (:constructor %make-fvec))
@@ -52,7 +57,7 @@
     (vec-ctx-map (fvec-vec-ctx x) #'nconc-it)
     res))
 
-(defmethod add ((x fvec) index &optional (val t))
+(defmethod add ((x fvec) index val)
   (%make-fvec :vec-ctx (vec-ctx-add (fvec-vec-ctx x) index val)))
 
 (defmethod add* ((x fvec) &rest contents)
@@ -161,6 +166,12 @@
 
 ;;;;;;;;;; FVEC COMMON UTILS
 
-(defun fvec-iota (n &key (start 0) (step 1))
+(defmethod fvec-iota (n &key (start 0) (step 1))
   (%make-fvec :vec-ctx (vec-ctx-iota n start step)))
+
+(defmethod fvec-list ((x fvec))
+  (fmap-to x #'identity :result-type 'list))
+
+(defmethod fvec-vector ((x fvec))
+  (fmap-to x #'identity :result-type 'vector))
 

@@ -9,5 +9,6 @@
                (:file "vec-ctx")
                (:file "ftab")
                (:file "fvec")
+               (:file "fset")
                (:file "test")))
 

@@ -1,14 +1,9 @@
 (in-package :x.fdatatypes)
 
-;;;;;;;;;; INTERFACE TO FTAB AND FVEC
+;;;;;;;;;; INTERFACE TO FTAB, FVEC, FSET
 
 (defgeneric size (container))
 (defgeneric empty (container))
-
-(defgeneric vals (container))
-
-(defgeneric add (container key &optional val))
-(defgeneric add* (container &rest contents))
 
 (defgeneric ref (container key))
 (defgeneric ref* (container &rest keys))
@@ -19,10 +14,22 @@
 (defgeneric del (container key))
 (defgeneric del* (container &rest keys))
 
-(defgeneric fmap (container function &key from-end))
 (defgeneric fmap-to (container function &key result-type from-end))
 (defgeneric fold (container function &key init from-end))
 (defgeneric filter (container predicate &key from-end))
+
+;;;;;;;;;; INTERFACE TO FTAB, FVEC
+
+(defgeneric vals (container))
+
+(defgeneric add (container key val))
+(defgeneric add* (container &rest contents))
+
+(defgeneric fmap (container function &key from-end))
+
+;;;;;;;;;; INTERFACE TO FTAB, FSET
+
+(defgeneric keys (container))
 
 ;;;;;;;;;;
 

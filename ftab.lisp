@@ -2,10 +2,6 @@
 
 (declaim (optimize (speed 3) (safety 1) (space 0) (compilation-speed 0)))
 
-;;;;;;;;;; SPECIFIC TO FTAB
-
-(defgeneric keys (container))
-
 ;;;;;;;;;; USER CONSTRUCTORS:
 
 (defun ftab-ex (&key (key-test #'equal) (val-test #'eq) (hash-fun #'sxhash))
@@ -18,6 +14,14 @@
   (map-associations-1 #'add initial-contents (ftab-ex)
                       :bad-value-fn #'bad-value-for-key
                       :bad-value-datum "Odd number of elements in INITIAL-CONTENTS"))
+
+(defmethod coerce-ftab ((x hash-table) &key (key-test #'equal) (val-test #'eq) (hash-fun #'sxhash))
+  (let ((ctx (make-tab-ctx :root (make-empty-node)
+                           :hash-fun hash-fun
+                           :key-test key-test
+                           :val-test val-test)))
+    (maphash (lambda (key val) (setf ctx (tab-ctx-add ctx key val))) x)
+    (%make-ftab :tab-ctx ctx)))
 
 ;;;;;;;;;;
 
@@ -55,7 +59,7 @@
                    (push (leaf-node-val n) result)))
     result))
 
-(defmethod add ((x ftab) key &optional (val t))
+(defmethod add ((x ftab) key val)
   (let* (((:slotval tab-ctx) x)
          (new-tab-ctx (tab-ctx-add tab-ctx key val)))
     (if (eq tab-ctx new-tab-ctx)
@@ -168,7 +172,7 @@
 
 ;;;;;;;;;; FTAB COMMON UTILS
 
-(defun ftab-alist (ftab)
-  (fmap-to ftab (lambda (k v) (cons k v)) :result-type 'list))
+(defmethod ftab-alist ((x ftab))
+  (fmap-to x (lambda (k v) (cons k v)) :result-type 'list))
 
 
