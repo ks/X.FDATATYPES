@@ -122,7 +122,7 @@
       (tab-ctx-map tab-ctx #'f from-end)
       (%make-ftab :tab-ctx new-tab-ctx))))
 
-(defmethod fmap-to ((x ftab) function &key result-type from-end)
+(defmethod fmap-to (result-type (x ftab) function &key from-end)
   (declare (function function))
   (let (result cursor)
     (labels ((wrap (n)
@@ -154,7 +154,7 @@
   (let ((acc init))
     (flet ((f (key val)
              (setf acc (funcall function acc key val))))
-      (fmap-to x #'f :result-type nil :from-end from-end)
+      (fmap-to nil x #'f :from-end from-end)
       acc)))
 
 (defmethod filter ((x ftab) predicate &key from-end)
@@ -173,6 +173,6 @@
 ;;;;;;;;;; FTAB COMMON UTILS
 
 (defmethod ftab-alist ((x ftab))
-  (fmap-to x (lambda (k v) (cons k v)) :result-type 'list))
+  (fmap-to 'list x (lambda (k v) (cons k v))))
 
 

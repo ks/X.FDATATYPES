@@ -100,7 +100,7 @@
       (vec-ctx-map (fvec-vec-ctx x) #'f from-end)
       (%make-fvec :vec-ctx new-vec-ctx))))
 
-(defmethod fmap-to ((x fvec) function &key result-type from-end)
+(defmethod fmap-to (result-type (x fvec) function &key from-end)
   (declare (function function))
   (let (result cursor)
     (labels ((list-accumulate (val)
@@ -130,7 +130,7 @@
   (let ((acc init))
     (flet ((f (val)
              (setf acc (funcall function acc val))))
-      (fmap-to x #'f :result-type nil :from-end from-end)
+      (fmap-to nil x #'f :from-end from-end)
       acc)))
 
 (defmethod filter ((x fvec) predicate &key from-end)
@@ -170,8 +170,8 @@
   (%make-fvec :vec-ctx (vec-ctx-iota n start step)))
 
 (defmethod fvec-list ((x fvec))
-  (fmap-to x #'identity :result-type 'list))
+  (fmap-to 'list x #'identity))
 
 (defmethod fvec-vector ((x fvec))
-  (fmap-to x #'identity :result-type 'vector))
+  (fmap-to 'vector x #'identity))
 

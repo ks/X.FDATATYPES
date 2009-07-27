@@ -122,7 +122,21 @@
   (dolist (key keys x)
     (setf x (del x key))))
 
-(defmethod fmap-to ((x fset) function &key result-type from-end)
+(defmethod fmap ((x fset) function &key from-end)
+  (let* (((:slotval tab-ctx) x)
+         (new-tab-ctx (make-tab-ctx :root (make-empty-node)
+                                    :hash-fun (tab-ctx-hash-fun tab-ctx)
+                                    :key-test (tab-ctx-key-test tab-ctx)
+                                    :val-test (tab-ctx-val-test tab-ctx))))
+    (flet ((f (node)
+             (let* (((:slotval key) node))
+               (setf new-tab-ctx
+                     (tab-ctx-add new-tab-ctx (funcall function key) t)))))
+      (declare (dynamic-extent #'f))
+      (tab-ctx-map tab-ctx #'f from-end)
+      (%make-fset :tab-ctx new-tab-ctx))))
+
+(defmethod fmap-to (result-type (x fset) function &key from-end)
   (declare (function function))
   (let (result cursor)
     (labels ((wrap (n)
@@ -154,7 +168,7 @@
   (let ((acc init))
     (flet ((f (key)
              (setf acc (funcall function acc key))))
-      (fmap-to x #'f :result-type nil :from-end from-end)
+      (fmap-to nil x #'f :from-end from-end)
       acc)))
 
 (defmethod filter ((x fset) predicate &key from-end)
@@ -175,7 +189,7 @@
 ;;;;;;;;;; FSET COMMON UTILS
 
 (defmethod fset-list ((x fset))
-  (fmap-to x #'identity :result-type 'list))
+  (fmap-to 'list x #'identity))
 
 (defmethod fset-difference ((x fset) &rest fsets)
   (labels ((difference-1 (fset-1 fset-2)
@@ -193,9 +207,7 @@
 (defmethod fset-union (container &rest containers)
   (let ((result container))
     (dolist (c containers)
-      (fmap-to c
-               (lambda (key)
-                 (setf result (add-key result key)))
-               :result-type nil))
+      (setf result (fold c #'add-key :init result)))
+    ;;(fmap-to nil c (lambda (key) (setf result (add-key result key)))))
     result))
 

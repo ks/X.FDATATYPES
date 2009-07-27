@@ -14,7 +14,7 @@
 (defgeneric del (container key))
 (defgeneric del* (container &rest keys))
 
-(defgeneric fmap-to (container function &key result-type from-end))
+(defgeneric fmap-to (result-type container function &key from-end))
 (defgeneric fold (container function &key init from-end))
 (defgeneric filter (container predicate &key from-end))
 

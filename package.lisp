@@ -1,7 +1,5 @@
 (in-package :cl-user)
 
-;; Clojure like (Bagwell Tries) functional hash-table
-;; Clojure like (?) functional array
 (defpackage :x.fdatatypes
   (:use :common-lisp :x.let-star)
   (:shadowing-import-from x.let-star let*)
@@ -42,7 +40,6 @@
    "KEYS"             ;; returns keys as list
 
    ;; FTAB FVEC
-   "FMAP"             ;; maps function over container, returns new container
    "VALS"             ;; returns values of container as list
    
    ;; *
@@ -57,6 +54,7 @@
    "REF-OPT-FN*"      ;; gets more values at keys/indexes as list, calls function if not found
    "DEL"              ;; removes element from container (use del-tail for fvec for effeciency if you can)
    "DEL*"             ;; removes more elements from container in one go (use del-tail* for fvec for effeciency if you can)
+   "FMAP"             ;; maps function over container, returns new container
    "FMAP-TO"          ;; maps function over container, returns type supplied as argument (nil, list, vector, bit-vector, ...)
    "FOLD"             ;; fold function over container
    "FILTER"           ;; filter function over container, returns new container
