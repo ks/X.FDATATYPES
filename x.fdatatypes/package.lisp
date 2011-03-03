@@ -8,7 +8,9 @@
    "FSET"             ;; constructor
    "FSET-EX"          ;; constructor
    "COERCE-FSET"      ;; converts data type to fset
+   "SEQUENCE-FSET"    ;; converts sequence to fset
    "FSET-LIST"        ;; converts fset to list
+   "FSET-VECTOR"      ;; converts fset to vector
    "FSET-DIFFERENCE"  ;; fset difference
    "FSET-EXCLUSIVE-OR";; fset exlusive or
    "FSET-UNION"       ;; fset union
@@ -58,6 +60,8 @@
    "FMAP-TO"          ;; maps function over container, returns type supplied as argument (nil, list, vector, bit-vector, ...)
    "FOLD"             ;; fold function over container
    "FILTER"           ;; filter function over container, returns new container
+   "ITERATOR"         ;; gets iterator of the container
+   "ITERATOR-NEXT"    ;; advances iterator, returns (values next-iterator key val validp)
    ))
    
    

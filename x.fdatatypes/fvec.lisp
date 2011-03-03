@@ -164,6 +164,9 @@
           (setf res-ctx (vec-ctx-del-tail res-ctx)))
         (%make-fvec :vec-ctx res-ctx))))
 
+(defmethod iterator ((x fvec))
+  (vec-ctx-iterator (fvec-vec-ctx x)))
+
 ;;;;;;;;;; FVEC COMMON UTILS
 
 (defmethod fvec-iota (n &key (start 0) (step 1))

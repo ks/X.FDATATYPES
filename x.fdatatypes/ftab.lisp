@@ -170,6 +170,9 @@
           x
           (%make-ftab :tab-ctx new-tab-ctx)))))
 
+(defmethod iterator ((x ftab))
+  (tab-ctx-iterator (ftab-tab-ctx x)))
+
 ;;;;;;;;;; FTAB COMMON UTILS
 
 (defmethod ftab-alist ((x ftab))

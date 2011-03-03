@@ -18,6 +18,9 @@
 (defgeneric fold (container function &key init from-end))
 (defgeneric filter (container predicate &key from-end))
 
+(defgeneric iterator (container))
+(defgeneric iterator-next (iterator))
+
 ;;;;;;;;;; INTERFACE TO FTAB, FVEC
 
 (defgeneric vals (container))
@@ -104,64 +107,6 @@
         (return-container-as-is ()
           container)))))
 
-(defun %reevaluate-constant (name value test)
-  (if (not (boundp name))
-      value
-      (let ((old (symbol-value name))
-            (new value))
-        (if (not (constantp name))
-            (prog1 new
-              (cerror "Try to redefine the variable as a constant."
-                      "~@<~S is an already bound non-constant variable ~
-                       whose value is ~S.~:@>" name old))
-            (if (funcall test old new)
-                old
-                (restart-case
-                    (error "~@<~S is an already defined constant whose value ~
-                              ~S is not equal to the provided initial value ~S ~
-                              under ~S.~:@>" name old new test)
-                  (ignore ()
-                    :report "Retain the current value."
-                    old)
-                  (continue ()
-                    :report "Try to redefine the constant."
-                    new)))))))
-
-(defmacro define-constant (name initial-value &key (test ''eql) documentation)
-  `(defconstant ,name (%reevaluate-constant ',name ,initial-value ,test)
-     ,@(when documentation `(,documentation))))
-
-(defun before-last (list)
-  (if (cddr list)
-      (before-last (cdr list))
-      list))
-
-(defmacro nconcing ((&key (init nil)
-                          (into 'nconc-result)
-                          (call 'nconc-it)
-                          (count nil)
-                          (last nil)
-                          (before-last nil))
-                    &body body)
-  (let ((head-sym (gensym "HEAD"))
-        (tail-sym (gensym "TAIL")))
-    `(let* ((,head-sym (cons nil ,init))
-            (,tail-sym (last ,head-sym))
-            (,into (cdr ,head-sym))
-            ,@(when count `((,count (length ,init))))
-            ,@(when last `((,last nil)))
-            ,@(when before-last `((,before-last (before-last ,init)))))
-       (flet ((,call (x)
-                ,@(when before-last
-                        `((setf ,before-last 
-                                (unless (eq ,head-sym ,tail-sym)
-                                  ,tail-sym))))
-                (rplacd ,tail-sym (setf ,tail-sym (list x)))
-                (setf ,into (cdr ,head-sym))
-                ,@(when last `((setf ,last ,tail-sym)))
-                ,@(when count `((incf ,count)))))
-         ,@body))))
-
 (defun nth-split (list n)
   (values (subseq list 0 n) (nthcdr n list)))
 
@@ -203,12 +148,12 @@
   (declare (shift shift) (fixnum hash))
   (logand (ash hash (- shift)) #x1f))
 
-(declaim (inline mask))
+(declaim (inline bit-position))
 (defun bit-position (hash shift)
   (declare (shift shift) (fixnum hash))
   (ash 1 (mask hash shift)))
 
-(declaim (inline mask))
+(declaim (inline shrink-clone-simple-vector))
 (defun shrink-clone-simple-vector (orig index)
   (declare (simple-vector orig) (fixnum-1 index))
   (let* ((new (make-array (1- (length orig)))))
@@ -216,7 +161,7 @@
     (replace new orig :start1 index :start2 (1+ index))
     new))
 
-(declaim (inline mask))
+(declaim (inline expand-clone-simple-vector))
 (defun expand-clone-simple-vector (orig index value)
   (declare (simple-vector orig) (fixnum-1 index))
   (let* ((new (make-array (1+ (length orig)))))

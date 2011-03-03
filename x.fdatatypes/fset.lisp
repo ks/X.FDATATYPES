@@ -185,11 +185,24 @@
           x
           (%make-fset :tab-ctx new-tab-ctx)))))
 
+(defmethod iterator ((x fset))
+  (tab-ctx-iterator (fset-tab-ctx x)))
 
 ;;;;;;;;;; FSET COMMON UTILS
 
+(defmethod sequence-fset ((xs sequence) &key (key-test #'equal) (hash-fun #'sxhash))
+  (let ((result (fset-ex :key-test key-test
+                         :hash-fun hash-fun)))
+    (map nil (lambda (x)
+               (setf result (add-key result x)))
+         xs)
+    result))
+
 (defmethod fset-list ((x fset))
   (fmap-to 'list x #'identity))
+
+(defmethod fset-vector ((x fset))
+  (fmap-to 'simple-vector x #'identity))
 
 (defmethod fset-difference ((x fset) &rest fsets)
   (labels ((difference-1 (fset-1 fset-2)

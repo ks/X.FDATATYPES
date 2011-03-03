@@ -59,6 +59,73 @@
 (defun tab-ctx-map (tab-ctx leaf-node-fn &optional from-end)
   (inode-map (tab-ctx-root tab-ctx) leaf-node-fn from-end))
 
+
+(defstruct (tab-ctx-iterator (:constructor %make-tab-ctx-iterator)) cursor)
+
+(defun tab-ctx-iterator (tab-ctx)
+  (let* (((:slotval root) tab-ctx))
+    (%make-tab-ctx-iterator :cursor root)))
+
+(labels ((nodes (elem)
+           (etypecase elem
+             ((or bitmap-indexed-node full-node)
+              (values (slot-value elem 'nodes) t))
+             (hash-collision-node
+              (values (slot-value elem 'leaves) nil))))
+         (rec-down (root-path)
+           (let* ((top (car root-path))
+                  (#(idx _ nodes) top)
+                  (elem (aref nodes idx)))
+             (declare (simple-vector top nodes))
+             (if (leaf-node-p elem)
+                 root-path
+                 (let* (((:mval nodes nest) (nodes elem))
+                        (path-elem (vector 0 (length nodes) nodes))
+                        (new-path (cons path-elem root-path)))
+                   (declare (simple-vector nodes))
+                   (if nest
+                       (rec-down new-path)
+                       new-path)))))
+         (next-path (root-path)
+           (when root-path
+             (let* (((top . rest) root-path)
+                    (#(idx len nodes) top)
+                    (next-idx (1+ idx)))
+               (declare (simple-vector top nodes) (fixnum-1 idx len))
+               (if (< next-idx len)
+                   (rec-down (cons (vector next-idx len nodes) rest))
+                   (next-path rest))))))
+  
+  ;; returns (values next-iterator key val validp)
+  (defun tab-ctx-iterator-next (tab-ctx-iterator)
+    (let* (((:slotval cursor) tab-ctx-iterator))
+      (flet ((path (cursor)
+               (if (listp cursor)
+                   cursor
+                   (let* ((nodes (nodes cursor)))
+                     (declare (simple-vector nodes))
+                     (rec-down (list (vector 0 (length nodes) nodes)))))))
+        (typecase cursor
+          (empty-node
+           (values nil nil nil nil))
+          (leaf-node
+           (values nil (leaf-node-key cursor) (leaf-node-val cursor) t))
+          (t
+           (let* ((path (path cursor))
+                  (top (car path))
+                  (#(idx _ nodes) top)
+                  (next-path (next-path path))
+                  (node (aref nodes idx)))
+             (declare (simple-vector top nodes))
+             (values (when next-path
+                       (%make-tab-ctx-iterator :cursor (next-path path)))
+                     (leaf-node-key node)
+                     (leaf-node-val node)
+                     t))))))))
+
+(defmethod iterator-next ((x tab-ctx-iterator))
+  (tab-ctx-iterator-next x))
+
 ;;;;;;;;;;
 
 (defgeneric inode-add (tab-ctx node shift hash key val)) 
@@ -182,7 +249,7 @@
                              :shift shift
                              :hash (inode-hash (svref nodes 0))))
 
-(declaim (inline mask))
+(declaim (inline create-node))
 (defun create-node (bitmap nodes shift) 
   (if (eql bitmap -1)
       (make-full-node :nodes nodes :shift shift)
@@ -190,7 +257,7 @@
                                 :nodes nodes
                                 :shift shift)))
 
-(declaim (inline mask))
+(declaim (inline create-node-with-leaf))
 (defun create-node-with-leaf (tab-ctx shift branch hash key val)
   (let ((node (make-bitmap-indexed-node
                :bitmap (bit-position (inode-hash branch) shift)
@@ -198,7 +265,7 @@
                :shift shift)))
     (inode-add tab-ctx node shift hash key val)))
 
-(declaim (inline mask))
+(declaim (inline index))
 (defun index (node bit)
   (declare (bitmap-indexed-node node)
            (non-negative-fixnum bit))
