@@ -1,9 +1,8 @@
 (in-package :cl-user)
 
 (asdf:defsystem :x.fdatatypes
-  :depends-on (:x.let-star)
   :serial t
-  :components ((:module "x.fdatatypes"
+  :components ((:module "src"
                 :components ((:file "package")
                              (:file "macros")
                              (:file "common")

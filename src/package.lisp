@@ -1,8 +1,7 @@
 (in-package :cl-user)
 
 (defpackage :x.fdatatypes
-  (:use :common-lisp :x.let-star)
-  (:shadowing-import-from x.let-star let*)
+  (:use :common-lisp)
   (:export
    ;; FSET
    "FSET"             ;; constructor

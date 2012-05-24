@@ -84,8 +84,8 @@
         (signal 'return-container-as-is)))))
 
 (defun map-associations (fn sequence container)
-  (let* ((mode :key)
-         (key nil))
+  (let ((mode :key)
+        (key nil))
     (map nil (lambda (elem)
                (ecase mode
                  (:key (setf key elem
@@ -156,7 +156,7 @@
 (declaim (inline shrink-clone-simple-vector))
 (defun shrink-clone-simple-vector (orig index)
   (declare (simple-vector orig) (fixnum-1 index))
-  (let* ((new (make-array (1- (length orig)))))
+  (let ((new (make-array (1- (length orig)))))
     (replace new orig :end1 index)
     (replace new orig :start1 index :start2 (1+ index))
     new))
@@ -164,7 +164,7 @@
 (declaim (inline expand-clone-simple-vector))
 (defun expand-clone-simple-vector (orig index value)
   (declare (simple-vector orig) (fixnum-1 index))
-  (let* ((new (make-array (1+ (length orig)))))
+  (let ((new (make-array (1+ (length orig)))))
     (replace new orig :end2 index)
     (setf (svref new index) value)
     (replace new orig :start1 (1+ index) :start2 index)
@@ -174,5 +174,5 @@
 (defun map-simple-vector-from-end (function vector)
   (declare (simple-vector vector) (function function))
   (loop :for i :from (1- (length vector)) :downto 0
-     :do (funcall function (svref vector i))))
+        :do (funcall function (svref vector i))))
 

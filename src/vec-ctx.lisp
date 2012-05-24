@@ -26,19 +26,20 @@
   root-path tail index)
 
 (defun vec-ctx-iterator (vec-ctx)
-  (let* (((:slotval root tail shift) vec-ctx))
+  (with-slots (root tail shift)
+      vec-ctx
     (declare (fixnum-1 shift))
-    (%make-vec-ctx-iterator
-     :root-path root
-     :tail tail
-     :index (truncate shift +vec-ctx-shift+))))  ;; we pass levels in index slot first time
+    (%make-vec-ctx-iterator :root-path root
+                            :tail tail
+                            :index (truncate shift +vec-ctx-shift+))))  ;; we pass levels in index slot first time
 
 (labels ((rec-down (root-path level)
            (declare (fixnum-1 level))
            (if (zerop level)
                root-path
                (let* ((top (car root-path))
-                      (#(idx _ nodes) top)
+                      (idx (aref top 0))
+                      (nodes (aref top 2))
                       (nodes-1 (aref nodes idx)))
                  (declare (simple-vector top nodes nodes-1))
                  (rec-down (cons (vector 0 (length nodes-1) nodes-1)
@@ -47,13 +48,17 @@
          (next-root-path (root-path &optional (level 0))
            (declare (fixnum-1 level))
            (when root-path
-             (let* (((top . rest) root-path)
-                    (#(idx len nodes) top)
-                    (next-idx (1+ idx)))
-               (declare (simple-vector top nodes) (fixnum-1 idx len))
-               (if (< next-idx len)
-                   (rec-down (cons (vector next-idx len nodes) rest) level)
-                   (next-root-path rest (1+ level))))))
+             (destructuring-bind (top . rest)
+                 root-path
+               (declare (simple-vector top))
+               (let* ((idx (aref top 0))
+                      (len (aref top 1))
+                      (nodes (aref top 2))
+                      (next-idx (1+ idx)))
+                 (declare (simple-vector nodes) (fixnum-1 idx len))
+                 (if (< next-idx len)
+                     (rec-down (cons (vector next-idx len nodes) rest) level)
+                     (next-root-path rest (1+ level)))))))
          (next-path (root-path tail)
            (let ((next-root-path (next-root-path root-path)))
              (if next-root-path
@@ -72,24 +77,28 @@
 
   ;; returns (values next-iterator key val validp)
   (defun vec-ctx-iterator-next (vec-ctx-iterator)
-    (let* (((:slotval root-path tail index) vec-ctx-iterator))
+    (let ((root-path (vec-ctx-iterator-root-path vec-ctx-iterator))
+          (tail (vec-ctx-iterator-tail vec-ctx-iterator))
+          (index (vec-ctx-iterator-index vec-ctx-iterator)))
       (when (vectorp root-path)
         (multiple-value-setq (root-path tail)
           (first-path root-path tail index))
         (setf index 0))
       (if root-path
           (let* ((top (car root-path))
-                 (#(idx _ nodes) top)
-                 ((:mval next-root-path next-tail) (next-path root-path tail)))
+                 (idx (aref top 0))
+                 (nodes (aref top 2)))
             (declare (simple-vector top) (integer index))
-            (values 
-             (when next-root-path
-               (%make-vec-ctx-iterator :root-path next-root-path
-                                       :tail next-tail
-                                       :index (1+ index)))
-             index
-             (svref nodes idx)
-             t))
+            (multiple-value-bind (next-root-path next-tail)
+                (next-path root-path tail)
+              (values 
+               (when next-root-path
+                 (%make-vec-ctx-iterator :root-path next-root-path
+                                         :tail next-tail
+                                         :index (1+ index)))
+               index
+               (svref nodes idx)
+               t)))
           (values nil nil nil nil)))))
 
 (defmethod iterator-next ((x vec-ctx-iterator))
@@ -97,24 +106,31 @@
 
 ;;;;;;;;;;
 
+(declaim (inline tail-off))
 (defun tail-off (vec-ctx)
   (- (vec-ctx-count vec-ctx) (length (vec-ctx-tail vec-ctx))))
 
 (defun vec-ctx-ref (vec-ctx key)
   (declare (fixnum-1 key))
-  (let* (((:slotval count shift tail (array root)) vec-ctx))
+  (let* ((count (vec-ctx-count vec-ctx))
+         (shift (vec-ctx-shift vec-ctx))
+         (tail (vec-ctx-tail vec-ctx))
+         (array (vec-ctx-root vec-ctx)))
     (declare (fixnum-1 count) (shift shift))
     (if (and (>= key 0) (< key count))
         (if (>= key (tail-off vec-ctx))
             (svref tail (logand key #x1F))
             (loop :for level :from shift :above 0 :by +vec-ctx-shift+
-               :do (setf array (svref array (mask key level)))
-               :finally (return (svref array (logand key #x1f)))))
+                  :do (setf array (svref array (mask key level)))
+                  :finally (return (svref array (logand key #x1f)))))
         (error 'out-of-bounds :bad-index key :limit count))))
 
 (defun vec-ctx-update (vec-ctx index val)
   (declare (fixnum-1 index))
-  (let* (((:slotval count shift tail root) vec-ctx))
+  (let* ((count (vec-ctx-count vec-ctx))
+         (shift (vec-ctx-shift vec-ctx))
+         (tail (vec-ctx-tail vec-ctx))
+         (root (vec-ctx-root vec-ctx)))
     (declare (simple-vector tail) (fixnum-1 count))
     (cond ((and (>= index 0) (< index count))
            (if (>= index (tail-off vec-ctx))
@@ -156,7 +172,10 @@
                  (expand-clone-simple-vector root root-length new-child)))))
 
   (defun vec-ctx-add-tail (vec-ctx val)
-    (let* (((:slotval count shift tail root) vec-ctx)
+    (let* ((count (vec-ctx-count vec-ctx))
+           (shift (vec-ctx-shift vec-ctx))
+           (tail (vec-ctx-tail vec-ctx))
+           (root (vec-ctx-root vec-ctx))
            (tail-length (length tail)))
       (declare (simple-vector tail) (fixnum-1 count) (shift shift))
       (if (< tail-length +vec-ctx-block-size+)
@@ -164,35 +183,40 @@
                         :shift shift
                         :root root
                         :tail (expand-clone-simple-vector tail tail-length val))
-          (let* (((:mval new-root expansion) (push-tail vec-ctx (- shift +vec-ctx-shift+) root tail))
-                 (new-shift shift))
-            (unless (null expansion)
-              (setf new-root (vector new-root expansion))
-              (incf new-shift +vec-ctx-shift+))
-            (make-vec-ctx :count (1+ count) :shift new-shift :root new-root :tail (vector val))))))
+          (multiple-value-bind (new-root expansion)
+              (push-tail vec-ctx (- shift +vec-ctx-shift+) root tail)
+            (let ((new-shift shift))
+              (unless (null expansion)
+                (setf new-root (vector new-root expansion))
+                (incf new-shift +vec-ctx-shift+))
+              (make-vec-ctx :count (1+ count) :shift new-shift :root new-root :tail (vector val)))))))
 
   (defun vec-ctx-add (vec-ctx index val)
     (declare (fixnum index))
-    (let* (((:slotval count shift root tail) vec-ctx))
+    (let* ((count (vec-ctx-count vec-ctx))
+           (shift (vec-ctx-shift vec-ctx))
+           (tail (vec-ctx-tail vec-ctx))
+           (root (vec-ctx-root vec-ctx)))
       (declare (fixnum-1 count) (shift shift) (simple-vector tail))
       (when (or (> index count) (< index 0))
         (error 'out-of-bounds :bad-index index :limit (1+ count)))
       (if (>= index (tail-off vec-ctx))
           (if (eql index count)
               (vec-ctx-add-tail vec-ctx val)
-              (let* ((chunk-idx (rem index +vec-ctx-block-size+)))
+              (let ((chunk-idx (rem index +vec-ctx-block-size+)))
                 (if (eql (length tail) +vec-ctx-block-size+)
                     (let ((new-tail (make-array +vec-ctx-block-size+))
                           (last-val (svref tail 31)))
                       (replace new-tail tail :end2 chunk-idx)
                       (setf (svref new-tail chunk-idx) val)
                       (replace new-tail tail :start1 (1+ chunk-idx) :start2 chunk-idx :end2 31)
-                      (let* (((:mval new-root expansion) (push-tail vec-ctx (- shift +vec-ctx-shift+) root new-tail))
-                             (new-shift shift))
-                        (unless (null expansion)
-                          (setf new-root (vector new-root expansion))
-                          (incf new-shift +vec-ctx-shift+))
-                        (make-vec-ctx :count (1+ count) :shift new-shift :root new-root :tail (vector last-val))))
+                      (multiple-value-bind (new-root expansion)
+                          (push-tail vec-ctx (- shift +vec-ctx-shift+) root new-tail)
+                        (let ((new-shift shift))
+                          (unless (null expansion)
+                            (setf new-root (vector new-root expansion))
+                            (incf new-shift +vec-ctx-shift+))
+                          (make-vec-ctx :count (1+ count) :shift new-shift :root new-root :tail (vector last-val)))))
                     (make-vec-ctx :count (1+ count)
                                   :shift shift
                                   :root root
@@ -200,8 +224,8 @@
           (vec-ctx-add*-helper vec-ctx (list index) (list val))))))
 
 (defun vec-ctx-add-tail* (vec-ctx contents)
-  (loop :for x :in contents
-     :do (setf vec-ctx (vec-ctx-add-tail vec-ctx x)))
+  (dolist (x contents)
+    (setf vec-ctx (vec-ctx-add-tail vec-ctx x)))
   vec-ctx)
 
 (labels ((pop-tail (vec-ctx shift root)
@@ -223,7 +247,10 @@
              (values (shrink-clone-simple-vector root (1- root-length)) ptail))))
 
   (defun vec-ctx-del-tail (vec-ctx)
-    (let* (((:slotval count shift tail root) vec-ctx)
+    (let* ((count (vec-ctx-count vec-ctx))
+           (shift (vec-ctx-shift vec-ctx))
+           (tail (vec-ctx-tail vec-ctx))
+           (root (vec-ctx-root vec-ctx))
            (tail-length (length tail)))
       (declare (simple-vector tail) (fixnum-1 count) (shift shift))
       (cond ((zerop count)
@@ -234,33 +261,36 @@
              (let ((new-tail (shrink-clone-simple-vector tail (1- tail-length))))
                (make-vec-ctx :count (1- count) :shift shift :root root :tail new-tail)))
             (t
-             (let* (((:mval new-root ptail) (pop-tail vec-ctx (- shift +vec-ctx-shift+) root))
-                    (new-shift shift))
-               (declare ((or null simple-vector) new-root))
-               (when (null new-root)
-                 (setf new-root +empty-vec+))
-               (when (and (> shift +vec-ctx-shift+) (eql (length (the simple-vector new-root)) 1))
-                 (setf new-root (svref new-root 0))
-                 (decf new-shift +vec-ctx-shift+))
-               (make-vec-ctx :count (1- count) :shift new-shift :root new-root :tail ptail)))))))
+             (multiple-value-bind (new-root ptail)
+                 (pop-tail vec-ctx (- shift +vec-ctx-shift+) root)
+               (let ((new-shift shift))
+                 (declare ((or null simple-vector) new-root))
+                 (when (null new-root)
+                   (setf new-root +empty-vec+))
+                 (when (and (> shift +vec-ctx-shift+) (eql (length (the simple-vector new-root)) 1))
+                   (setf new-root (svref new-root 0))
+                   (decf new-shift +vec-ctx-shift+))
+                 (make-vec-ctx :count (1- count) :shift new-shift :root new-root :tail ptail))))))))
 
 (defun vec-ctx-iota (n &optional (start 0) (step 1))
   (declare (fixnum-1 n))
   (let ((v +empty-vec-ctx+))
     (loop :for x :from start :below n :by step
-       :do (setf v (vec-ctx-add-tail v x)))
+          :do (setf v (vec-ctx-add-tail v x)))
     v))
 
 (defun vec-ctx-map-chunks (vec-ctx function)
   (declare (function function))
-  (let* (((:slotval shift tail root) vec-ctx)
-         (id 0))
+  (let ((shift (vec-ctx-shift vec-ctx))
+        (tail (vec-ctx-tail vec-ctx))
+        (root (vec-ctx-root vec-ctx))
+        (id 0))
     (declare (fixnum-1 id) (shift shift))
     (labels ((rec (array level)
                (declare (simple-vector array) (fixnum-1 level))
                (if (zerop level)
                    (loop :for x :across array
-                      :do (funcall function t (prog1 id (incf id)) x))
+                         :do (funcall function t (prog1 id (incf id)) x))
                    (loop :for x :across array :do (rec x (1- level))))))
       (rec root (1- (truncate shift +vec-ctx-shift+)))
       (funcall function nil id tail)
@@ -268,12 +298,14 @@
 
 (defun vec-ctx-map (vec-ctx function &optional from-end)
   (if from-end
-      (let* (((:slotval shift tail root) vec-ctx))
+      (let ((shift (vec-ctx-shift vec-ctx))
+            (tail (vec-ctx-tail vec-ctx))
+            (root (vec-ctx-root vec-ctx)))
         (declare (shift shift))
         (labels ((map-backwards (array function)
                    (declare (simple-vector array) (function function))
                    (loop :for i :from (1- (length array)) :downto 0
-                      :do (funcall function (svref array i))))
+                         :do (funcall function (svref array i))))
                  (rec (array level)
                    (declare (fixnum-1 level))
                    (map-backwards array (if (zerop level)
@@ -349,8 +381,8 @@
   
 (defun vec-ctx-del*-build-content (vec-ctx indexes)
   (nconcing (:into content :count content-length :before-last before-last)
-    (let* ((chunk-indexes nil)
-           (buf (make-chunk-buffer)))
+    (let ((chunk-indexes nil)
+          (buf (make-chunk-buffer)))
       (labels ((copy (chunk start end)
                  (copy-chunk-buffer buf #'nconc-it chunk start end))
                (fn (not-last chunk-id chunk)
@@ -384,18 +416,18 @@
 
 (defun build-vec-ctx (content content-length before-last work-array work-index)
   (declare (fixnum-1 content-length))
-  (let* ((tail (if work-array
-                   (if (eql work-index +vec-ctx-block-size+)
-                       work-array
-                       (subseq (the simple-vector work-array) 0 work-index))
-                   (prog1 (or (cadr before-last) +empty-vec+)
-                     (rplacd before-last nil)
-                     (decf content-length)))))
+  (let ((tail (if work-array
+                  (if (eql work-index +vec-ctx-block-size+)
+                      work-array
+                      (subseq (the simple-vector work-array) 0 work-index))
+                  (prog1 (or (cadr before-last) +empty-vec+)
+                    (rplacd before-last nil)
+                    (decf content-length)))))
     (declare (simple-vector tail) (fixnum-1 content-length))
     (if (null content)
         (make-vec-ctx :count (length tail) :shift +vec-ctx-shift+ :root +empty-vec+ :tail tail)
-        (let* (((:mval root level)
-                (build-trees-from-content content content-length 1 +vec-ctx-block-size+)))
+        (multiple-value-bind (root level)
+            (build-trees-from-content content content-length 1 +vec-ctx-block-size+)
           (make-vec-ctx :count (+ (* content-length +vec-ctx-block-size+) (length tail))
                         :shift (* +vec-ctx-shift+ level)
                         :root root
@@ -406,7 +438,7 @@
 
 (defun vec-ctx-del* (vec-ctx indexes)
   (declare (list indexes))
-  (let* (((:slotval count) vec-ctx)
+  (let* ((count (vec-ctx-count vec-ctx))
          (indexes (sort (remove-duplicates indexes) #'<))
          (last (car (last indexes))))
     (cond ((null indexes)
@@ -420,21 +452,24 @@
 
 (defun vec-ctx-del (vec-ctx index)
   (declare (fixnum index))
-  (let* (((:slotval count) vec-ctx))
+  (let ((count (vec-ctx-count vec-ctx)))
     (declare (fixnum-1 count))
     (if (and (>= index 0) (< index count))
         (vec-ctx-del*-helper vec-ctx (list index))
         (error 'out-of-bounds :bad-index index :limit count))))
 
 (defun vec-ctx-update*-helper (vec-ctx idxs vals)
-  (let* ((chunk-idxs nil)
-         (chunk-vals nil)
-         (chunk-idxs-length 0)
-         ((:slotval count shift root tail) vec-ctx))
+  (let ((chunk-idxs nil)
+        (chunk-vals nil)
+        (chunk-idxs-length 0)
+        (count (vec-ctx-count vec-ctx))
+        (shift (vec-ctx-shift vec-ctx))
+        (tail (vec-ctx-tail vec-ctx))
+        (root (vec-ctx-root vec-ctx)))
     (flet ((update-chunk (chunk idxs vals)
              (loop :for idx :of-type fixnum :in idxs
-                :for val :in vals
-                :do (setf (svref chunk (rem idx +vec-ctx-block-size+)) val))
+                   :for val :in vals
+                   :do (setf (svref chunk (rem idx +vec-ctx-block-size+)) val))
              chunk))
       (if (>= (car idxs) (tail-off vec-ctx))
           (make-vec-ctx :count count
@@ -478,9 +513,9 @@
                (funcall one-elem-fn vec-ctx (caar pairs) (cdar pairs)))
               (t
                (setf pairs (sort pairs #'< :key #'car))
-               (let* (((:slotval count) vec-ctx)
-                      (first-index (caar pairs))
-                      (last-index (caar (last pairs))))
+               (let ((count (vec-ctx-count vec-ctx))
+                     (first-index (caar pairs))
+                     (last-index (caar (last pairs))))
                  (cond ((< first-index 0)
                         (error 'out-of-bounds :bad-index first-index :limit count))
                        ((>= last-index count)
@@ -496,9 +531,9 @@
 
 (defun vec-ctx-add*-build-content (vec-ctx idxs vals)
   (nconcing (:into content :count content-length :before-last before-last)
-    (let* ((buf (make-chunk-buffer))
-           (tmp (vector 0))
-           (chunk-idxs nil))
+    (let ((buf (make-chunk-buffer))
+          (tmp (vector 0))
+          (chunk-idxs nil))
       (labels ((copy (chunk start end)
                  (copy-chunk-buffer buf #'nconc-it chunk start end))
                (push-val (val)
@@ -511,12 +546,12 @@
                           (chunk-indexes chunk-id idxs))
                         (let ((start 0))
                           (loop :for idx :in chunk-idxs
-                             :for val* :on vals
-                             :do (let ((val (car val*)))
-                                   (copy chunk start idx)
-                                   (push-val val)
-                                   (setf start idx))
-                             :finally (setf vals (cdr val*)))
+                                :for val* :on vals
+                                :do (let ((val (car val*)))
+                                      (copy chunk start idx)
+                                      (push-val val)
+                                      (setf start idx))
+                                :finally (setf vals (cdr val*)))
                           (copy chunk start (length chunk))))
                        (t
                         (copy chunk 0 (length chunk))))))

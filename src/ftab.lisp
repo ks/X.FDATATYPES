@@ -29,7 +29,8 @@
   (tab-ctx (error "no context") :type tab-ctx))
 
 (defmethod print-object ((x ftab) s)
-  (let* (((:slotval count key-test val-test hash-fun) (ftab-tab-ctx x)))
+  (with-slots (count key-test val-test hash-fun)
+      (ftab-tab-ctx x)
     (print-unreadable-object (x s :type t :identity t)
       (format s ":COUNT ~A :KEY-TEST ~A :VAL-TEST ~A :HASH-FUN ~A"
               count
@@ -60,7 +61,7 @@
     result))
 
 (defmethod add ((x ftab) key val)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (ftab-tab-ctx x))
          (new-tab-ctx (tab-ctx-add tab-ctx key val)))
     (if (eq tab-ctx new-tab-ctx)
         x
@@ -72,7 +73,8 @@
                       :bad-value-datum "Odd number of elements in CONTENTS"))
 
 (defmethod ref ((x ftab) key)
-  (let* (((:mval value found) (tab-ctx-ref (ftab-tab-ctx x) key)))
+  (multiple-value-bind (value found)
+      (tab-ctx-ref (ftab-tab-ctx x) key)
     (if found
         value
         (error 'not-found :key key))))
@@ -98,7 +100,7 @@
     (mapcar #'f keys)))
 
 (defmethod del ((x ftab) key)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (ftab-tab-ctx x))
          (new-tab-ctx (tab-ctx-del tab-ctx key)))
     (if (eq tab-ctx new-tab-ctx)
         x
@@ -109,13 +111,14 @@
     (setf x (del x key))))
 
 (defmethod fmap ((x ftab) function &key from-end)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (ftab-tab-ctx x))
          (new-tab-ctx (make-tab-ctx :root (make-empty-node)
                                     :hash-fun (tab-ctx-hash-fun tab-ctx)
                                     :key-test (tab-ctx-key-test tab-ctx)
                                     :val-test (tab-ctx-val-test tab-ctx))))
     (flet ((f (node)
-             (let* (((:slotval key val) node))
+             (let ((key (leaf-node-key node))
+                   (val (leaf-node-val node)))
                (setf new-tab-ctx
                      (tab-ctx-add new-tab-ctx key (funcall function key val))))))
       (declare (dynamic-extent #'f))
@@ -158,10 +161,11 @@
       acc)))
 
 (defmethod filter ((x ftab) predicate &key from-end)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (ftab-tab-ctx x))
          (new-tab-ctx tab-ctx))
     (flet ((f (node)
-             (let* (((:slotval key val) node))
+             (let ((key (leaf-node-key node))
+                   (val (leaf-node-val node)))
                (unless (funcall predicate key val)
                  (setf new-tab-ctx (tab-ctx-del new-tab-ctx key))))))
       (declare (dynamic-extent #'f))

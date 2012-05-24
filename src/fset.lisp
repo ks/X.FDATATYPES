@@ -37,12 +37,12 @@
   (tab-ctx (error "no context") :type tab-ctx))
 
 (defmethod print-object ((x fset) s)
-  (let* (((:slotval count key-test hash-fun) (fset-tab-ctx x)))
+  (let ((ctx (fset-tab-ctx x)))
     (print-unreadable-object (x s :type t :identity t)
       (format s ":COUNT ~A :KEY-TEST ~A :HASH-FUN ~A"
-              count
-              (function-name key-test)
-              (function-name hash-fun)))))
+              (tab-ctx-count ctx)
+              (function-name (tab-ctx-key-test ctx))
+              (function-name (tab-ctx-hash-fun ctx))))))
 
 ;;;;;;;;;;
 
@@ -60,14 +60,14 @@
     result))
 
 (defmethod add-key ((x fset) key)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (fset-tab-ctx x))
          (new-tab-ctx (tab-ctx-add tab-ctx key t)))
     (if (eq tab-ctx new-tab-ctx)
         x
         (%make-fset :tab-ctx new-tab-ctx))))
 
 (defmethod add-key* ((x fset) &rest keys)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (fset-tab-ctx x))
          (new-tab-ctx tab-ctx))
     (dolist (key keys)
       (setf new-tab-ctx (tab-ctx-add new-tab-ctx key t)))
@@ -76,7 +76,8 @@
         (%make-fset :tab-ctx new-tab-ctx))))
 
 (defmethod ref ((x fset) key)
-  (let* (((:mval value found) (tab-ctx-ref (fset-tab-ctx x) key)))
+  (multiple-value-bind (value found)
+      (tab-ctx-ref (fset-tab-ctx x) key)
     (declare (ignore value))
     (if found
         t
@@ -112,7 +113,7 @@
   (mapcar (lambda (key) (has-key x key)) keys))
 
 (defmethod del ((x fset) key)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (fset-tab-ctx x))
          (new-tab-ctx (tab-ctx-del tab-ctx key)))
     (if (eq tab-ctx new-tab-ctx)
         x
@@ -123,13 +124,13 @@
     (setf x (del x key))))
 
 (defmethod fmap ((x fset) function &key from-end)
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (fset-tab-ctx x))
          (new-tab-ctx (make-tab-ctx :root (make-empty-node)
                                     :hash-fun (tab-ctx-hash-fun tab-ctx)
                                     :key-test (tab-ctx-key-test tab-ctx)
                                     :val-test (tab-ctx-val-test tab-ctx))))
     (flet ((f (node)
-             (let* (((:slotval key) node))
+             (let ((key (leaf-node-key node)))
                (setf new-tab-ctx
                      (tab-ctx-add new-tab-ctx (funcall function key) t)))))
       (declare (dynamic-extent #'f))
@@ -149,17 +150,17 @@
                (incf cursor)))
       (declare (inline wrap list-accumulate vector-accumulate)
                (dynamic-extent #'wrap #'list-accumulate #'vector-accumulate))
-      (let* ((function1
-              (cond ((null result-type) #'wrap)
-                    ((eq result-type 'list)
-                     (setf result (make-list (size x))
-                           cursor result)
-                     #'list-accumulate)
-                    ((subtypep result-type 'array)
-                     (setf result (make-sequence result-type (size x))
-                           cursor 0)
-                     #'vector-accumulate)
-                    (t (error "Invalid RESULT-TYPE: ~A" result-type)))))
+      (let ((function1
+             (cond ((null result-type) #'wrap)
+                   ((eq result-type 'list)
+                    (setf result (make-list (size x))
+                          cursor result)
+                    #'list-accumulate)
+                   ((subtypep result-type 'array)
+                    (setf result (make-sequence result-type (size x))
+                          cursor 0)
+                    #'vector-accumulate)
+                   (t (error "Invalid RESULT-TYPE: ~A" result-type)))))
         (tab-ctx-map (fset-tab-ctx x) function1 from-end)
         result))))
 
@@ -173,10 +174,10 @@
 
 (defmethod filter ((x fset) predicate &key from-end)
   (declare (function predicate))
-  (let* (((:slotval tab-ctx) x)
+  (let* ((tab-ctx (fset-tab-ctx x))
          (new-tab-ctx tab-ctx))
     (flet ((f (node)
-             (let* (((:slotval key) node))
+             (let ((key (leaf-node-key node)))
                (unless (funcall predicate key)
                  (setf new-tab-ctx (tab-ctx-del new-tab-ctx key))))))
       (declare (dynamic-extent #'f))

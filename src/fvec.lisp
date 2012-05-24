@@ -40,9 +40,9 @@
   (vec-ctx (error "no context") :type vec-ctx))
 
 (defmethod print-object ((x fvec) s)
-  (let* (((:slotval count) (fvec-vec-ctx x)))
-    (print-unreadable-object (x s :type t :identity t)
-      (format s ":COUNT ~A" count))))
+  (print-unreadable-object (x s :type t :identity t)
+    (format s ":COUNT ~A" (vec-ctx-count (fvec-vec-ctx x)))))
+
 
 ;;;;;;;;;;
 
