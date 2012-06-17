@@ -545,13 +545,14 @@
                         (multiple-value-setq (chunk-idxs idxs)
                           (chunk-indexes chunk-id idxs))
                         (let ((start 0))
-                          (loop :for idx :in chunk-idxs
-                                :for val* :on vals
-                                :do (let ((val (car val*)))
-                                      (copy chunk start idx)
-                                      (push-val val)
-                                      (setf start idx))
-                                :finally (setf vals (cdr val*)))
+                          (when chunk-idxs
+                            (loop :for idx :in chunk-idxs
+                                  :for val* :on vals
+                                  :do (let ((val (car val*)))
+                                        (copy chunk start idx)
+                                        (push-val val)
+                                        (setf start idx))
+                                  :finally (setf vals (cdr val*))))
                           (copy chunk start (length chunk))))
                        (t
                         (copy chunk 0 (length chunk))))))
