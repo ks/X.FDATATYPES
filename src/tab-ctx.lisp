@@ -33,7 +33,7 @@
   (with-slots (root count hash-fun)
       tab-ctx
     (declare (fixnum-1 count))
-    (let ((new-root (inode-del tab-ctx root hash-fun key)))
+    (let ((new-root (inode-del tab-ctx root (funcall hash-fun key) key)))
       (if (eq root new-root)
           tab-ctx
           (make-tab-ctx :count (1- count)
