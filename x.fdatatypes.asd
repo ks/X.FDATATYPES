@@ -1,6 +1,9 @@
 (in-package :cl-user)
 
 (asdf:defsystem :x.fdatatypes
+  :description "functional data collections"
+  :author "karol.skocik@gmail.com"
+  :license "BSD compatible"
   :serial t
   :components ((:module "src"
                 :components ((:file "package")
